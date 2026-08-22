@@ -3,6 +3,7 @@ import sys, os
 from openpyxl import load_workbook
 import time
 from copy import copy
+import json
 # telegram
 import python_socks
 from telethon import TelegramClient
@@ -26,6 +27,98 @@ class Pack:
         print(self.name, name_dir, name_file, self.size_file)
 
 class SafetyStorage:
+    def __init__(self):
+        if not os.path.exists('log.bin'):
+            print("Файла log.bin нет, создаем...")
+            self.password = self.any_way_answer("Новый пароль: ")
+            self.api_id = self.any_way_answer("Новый API ID: ")
+            self.api_hash = self.any_way_answer("Новый API HASH: ")
+            self.data = {
+                "password": self.password,
+                "api_id": self.api_id,
+                "api_hash": self.api_hash
+            }
+            self.save_data(self.data)
+            return
+            
+        with open('log.bin', 'rb') as file:
+            self.data_crypted = file.read()
+        
+        self.password = input("Пароль: ")
+        used_salt = self.data_crypted[:16]
+        self.data_crypted = self.data_crypted[16:]
+        
+        try:
+            self.data = self.decrypt_data(self.data_crypted, self.password, used_salt)
+            self.data = json.loads(self.data)
+            print(f"Успешно расшифровано")
+            self.password = self.data["password"]
+            self.api_id = self.data["api_id"]
+            self.api_hash = self.data["api_hash"]
+        except Exception as e:
+            raise ValueError(f"\nОшибка расшифровки! Неверный пароль или данные повреждены. {e}")
+        self.print_data()
+        self.change_data()
+        self.save_data(self.data)
+
+    def save_data(self, data):
+        data = json.dumps(data, ensure_ascii=False, indent=4)
+        with open('log.bin', 'wb') as f:
+            encrypted_data, salt = self.encrypt_data(data, self.password)
+            f.write(salt+encrypted_data)
+            
+    def any_way_answer(self, text):
+        a = None
+        while not a:
+            a = input(text)
+        return a
+
+    def not_any_way_answer(self, text, a_):
+        a = input(text)
+        if a:
+            return a
+        return a_
+
+    def print_data(self):
+        if input("Вывести данные: "):
+            print(f"    Пароль: {self.password}\n    API ID: {self.api_id}\n    API HASH: {self.api_hash}")
+
+    def change_data(self):
+        if input("Изменить что-то: "):
+            self.password = self.not_any_way_answer("Новый пароль: ", self.password)
+            self.api_id = self.not_any_way_answer("Новый API ID: ", self.api_id)
+            self.api_hash = self.not_any_way_answer("Новый API HASH: ", self.api_hash)
+            self.data = {
+                "password": self.password,
+                "api_id": self.api_id,
+                "api_hash": self.api_hash
+            }
+        
+        
+    def generate_key(self, password: str, salt: bytes) -> bytes:
+        """Генерирует криптографический ключ на основе пароля и соли."""
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=1_000_000, 
+        )
+        return base64.urlsafe_b64encode(kdf.derive(password.encode()))
+    
+    def encrypt_data(self, data: str, password: str) -> tuple[bytes, bytes]:
+        """Шифрует данные по паролю. Возвращает (зашифрованные_данные, соль)."""
+        salt = os.urandom(16) 
+        key = self.generate_key(password, salt)
+        f = Fernet(key)
+        encrypted_data = f.encrypt(data.encode())
+        return encrypted_data, salt
+
+    def decrypt_data(self, encrypted_data: bytes, password: str, salt: bytes) -> str:
+        """Расшифровывает данные, используя исходный пароль и соль."""
+        key = self.generate_key(password, salt)
+        f = Fernet(key)
+        decrypted_data = f.decrypt(encrypted_data)
+        return decrypted_data.decode()
     
         
 class TelegramConnect:
@@ -41,6 +134,7 @@ class TelegramConnect:
 class AutoXML:
 
     def __init__(self):
+        self.storage = SafetyStorage()
         self.name = input("Имя: ")
         self.path = input("Путь до директории: ")
         self.source_path = "\\".join(os.path.abspath(__file__).split("\\")[:-1])
