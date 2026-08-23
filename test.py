@@ -28,43 +28,56 @@ class Pack:
 
 class SafetyStorage:
     def __init__(self):
-        if not os.path.exists('log.bin'):
+        if not os.path.exists('log.enc'):
             print("Файла log.bin нет, создаем...")
-            self.password = self.any_way_answer("Новый пароль: ")
-            self.api_id = self.any_way_answer("Новый API ID: ")
-            self.api_hash = self.any_way_answer("Новый API HASH: ")
+            password = self.any_way_answer("Новый пароль: ")
+            api_id = self.any_way_answer("Новый API ID: ")
+            api_hash = self.any_way_answer("Новый API HASH: ")
+            is_proxy = bool(self.any_way_answer("Нужен прокси: "))
+            if is_proxy:
+                proxy_host = self.any_way_answer("Нужен прокси host: ")
+                proxy_port = self.any_way_answer("Нужен прокси port: ")
+            else:
+                proxy_host = None
+                proxy_port = None
+            name = None
+            path = None
             self.data = {
-                "password": self.password,
-                "api_id": self.api_id,
-                "api_hash": self.api_hash
+                "password": password,
+                "api_id": api_id,
+                "api_hash": api_hash,
+                "is_proxy": is_proxy,
+                "proxy_host": proxy_host,
+                "proxy_port": proxy_port,
+                "name": name,
+                "path": path
             }
-            self.save_data(self.data)
+            self.save_data()
             return
             
-        with open('log.bin', 'rb') as file:
+        with open('log.enc', 'rb') as file:
             self.data_crypted = file.read()
         
-        self.password = input("Пароль: ")
+        password = input("Пароль: ")
         used_salt = self.data_crypted[:16]
-        self.data_crypted = self.data_crypted[16:]
+        data_crypted = self.data_crypted[16:]
         
         try:
-            self.data = self.decrypt_data(self.data_crypted, self.password, used_salt)
-            self.data = json.loads(self.data)
+            data = self.decrypt_data(data_crypted, password, used_salt)
+            self.data = json.loads(data)
             print(f"Успешно расшифровано")
-            self.password = self.data["password"]
-            self.api_id = self.data["api_id"]
-            self.api_hash = self.data["api_hash"]
+            
         except Exception as e:
             raise ValueError(f"\nОшибка расшифровки! Неверный пароль или данные повреждены. {e}")
-        self.print_data()
-        self.change_data()
-        self.save_data(self.data)
 
-    def save_data(self, data):
-        data = json.dumps(data, ensure_ascii=False, indent=4)
-        with open('log.bin', 'wb') as f:
-            encrypted_data, salt = self.encrypt_data(data, self.password)
+        self.question_print_data()
+        self.question_change_data()
+        self.save_data()
+
+    def save_data(self):
+        data = json.dumps(self.data, ensure_ascii=False, indent=4)
+        with open('log.enc', 'wb') as f:
+            encrypted_data, salt = self.encrypt_data(data, self.data['password'])
             f.write(salt+encrypted_data)
             
     def any_way_answer(self, text):
@@ -79,21 +92,29 @@ class SafetyStorage:
             return a
         return a_
 
-    def print_data(self):
+    def question_print_data(self):
         if input("Вывести данные: "):
-            print(f"    Пароль: {self.password}\n    API ID: {self.api_id}\n    API HASH: {self.api_hash}")
-
-    def change_data(self):
+            print(f"    Пароль: {self.data['password']}\n    API ID: {self.data['api_id']}\n    API HASH: {self.data['api_hash']}")
+            print(f"    Нужен ли прокси: {self.data['is_proxy']}")
+            if self.data['is_proxy']:
+                print(f"    Прокси HOST: {self.data['proxy_host']}\n    Прокси PORT: {self.data['proxy_port']}")
+            
+    
+    def question_change_data(self):
         if input("Изменить что-то: "):
-            self.password = self.not_any_way_answer("Новый пароль: ", self.password)
-            self.api_id = self.not_any_way_answer("Новый API ID: ", self.api_id)
-            self.api_hash = self.not_any_way_answer("Новый API HASH: ", self.api_hash)
-            self.data = {
-                "password": self.password,
-                "api_id": self.api_id,
-                "api_hash": self.api_hash
-            }
-        
+            self.data['password'] = self.not_any_way_answer("Новый пароль: ", self.data['password'])
+            self.data['api_id'] = self.not_any_way_answer("Новый API ID: ", self.data['api_id'])
+            self.data['api_hash'] = self.not_any_way_answer("Новый API HASH: ", self.data['api_hash'])
+            is_proxy = input("Нужен прокси: ")
+            if is_proxy == "no":
+                self.data['is_proxy'] = False
+            elif is_proxy == "yes" or self.data["is_proxy"]:
+                self.data['is_proxy'] = True
+                self.data['proxy_host'] = self.not_any_way_answer("Новый прокси host: ", self.data['proxy_host'])
+                self.data['proxy_port'] = self.not_any_way_answer("Новый прокси port: ", self.data['proxy_port'])
+        self.data['name'] = self.not_any_way_answer(f"Имя файла xml({self.data['name']}): ", self.data['name'])
+        self.data['path'] = self.not_any_way_answer(f"Путь до директории({self.data['path']}): ", self.data['path'])
+            
         
     def generate_key(self, password: str, salt: bytes) -> bytes:
         """Генерирует криптографический ключ на основе пароля и соли."""
@@ -135,13 +156,7 @@ class AutoXML:
 
     def __init__(self):
         self.storage = SafetyStorage()
-        self.name = input("Имя: ")
-        self.path = input("Путь до директории: ")
         self.source_path = "\\".join(os.path.abspath(__file__).split("\\")[:-1])
-        if not self.name:
-            self.name = "2026-08-19_Координирование ОП TЕСТ"
-        if not self.path:
-            self.path = "C:\\Users\\user\\Desktop\\2026-08-04_ЮТэйр_2026\\Координирование\\2026_08_19_Ютэйр ОП(Воропанов)"
 
     def search_into_directory(self, path):
         list_= []
@@ -159,8 +174,6 @@ class AutoXML:
                 list_.append(Pack(dir_, file_name[0], os.path.getsize(f"{dir_path}\\{file_name[0]}.jps")))
         return list_
 
-    def connect_to_telegram(self):
-        pass
 
     def full_copy_paste(self, copy_target, paste_target):
         paste_target.value = copy_target.value
@@ -196,7 +209,7 @@ class AutoXML:
             self.fill_string(ws, 4+i, info)
             
 
-        wb.save(f"{self.path}\\{self.name}.xlsx")
+        wb.save(f"{self.storage.data['path']}\\{self.storage.data['name']}.xlsx")
 
     def fill_string(self, ws, number_string, string):
         ws[f'A{number_string}'] = string.name
@@ -207,7 +220,7 @@ class AutoXML:
                 
         
     def run(self):
-        list_information = self.search_into_directory(self.path)
+        list_information = self.search_into_directory(self.storage.data["path"])
         self.create_XML(list_information)
         
 
