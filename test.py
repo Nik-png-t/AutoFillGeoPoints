@@ -4,9 +4,12 @@ from openpyxl import load_workbook
 import time
 from copy import copy
 import json
+import asyncio
+from datetime import datetime, timezone, date
 # telegram
 import python_socks
-from telethon import TelegramClient
+from telethon import TelegramClient, sync, utils, connection
+import telethon
 #crypto
 import base64
 from cryptography.fernet import Fernet
@@ -14,17 +17,16 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 class Pack:
-    def __init__(self, name_dir, name_file, size_file):
+    def __init__(self, name_dir=None, name_file=None, size_file=None, high=None):
         self.name = ""
+        self.high = high
         for i in name_dir:
             if i == "-":
                 break
-            
             self.name += i 
         self.name_dir = name_dir
         self.name_file = name_file
-        self.size_file = str(round(size_file / 1024 / 1024, 1)).replace(",", ".")
-        print(self.name, name_dir, name_file, self.size_file)
+        self.size_file = size_file
 
 class SafetyStorage:
     def __init__(self):
@@ -37,11 +39,14 @@ class SafetyStorage:
             if is_proxy:
                 proxy_host = self.any_way_answer("Нужен прокси host: ")
                 proxy_port = self.any_way_answer("Нужен прокси port: ")
+                proxy_secret = self.any_way_answer("Нужен прокси secret: ")
             else:
                 proxy_host = None
                 proxy_port = None
+                proxy_secret = None
             name = None
             path = None
+            target_date = None
             self.data = {
                 "password": password,
                 "api_id": api_id,
@@ -49,8 +54,10 @@ class SafetyStorage:
                 "is_proxy": is_proxy,
                 "proxy_host": proxy_host,
                 "proxy_port": proxy_port,
+                "proxy_secret": proxy_secret,
                 "name": name,
-                "path": path
+                "path": path,
+                "date": target_date
             }
             self.save_data()
             return
@@ -97,7 +104,7 @@ class SafetyStorage:
             print(f"    Пароль: {self.data['password']}\n    API ID: {self.data['api_id']}\n    API HASH: {self.data['api_hash']}")
             print(f"    Нужен ли прокси: {self.data['is_proxy']}")
             if self.data['is_proxy']:
-                print(f"    Прокси HOST: {self.data['proxy_host']}\n    Прокси PORT: {self.data['proxy_port']}")
+                print(f"    Прокси HOST: {self.data['proxy_host']}\n    Прокси PORT: {self.data['proxy_port']}\n Проки SECRET: {self.data['proxy_secret']}")
             
     
     def question_change_data(self):
@@ -112,8 +119,10 @@ class SafetyStorage:
                 self.data['is_proxy'] = True
                 self.data['proxy_host'] = self.not_any_way_answer("Новый прокси host: ", self.data['proxy_host'])
                 self.data['proxy_port'] = self.not_any_way_answer("Новый прокси port: ", self.data['proxy_port'])
+                self.data['proxy_secret'] = self.not_any_way_answer("Новый прокси secret: ", self.data['proxy_secret'])
         self.data['name'] = self.not_any_way_answer(f"Имя файла xml({self.data['name']}): ", self.data['name'])
         self.data['path'] = self.not_any_way_answer(f"Путь до директории({self.data['path']}): ", self.data['path'])
+        self.data['date'] = self.not_any_way_answer(f"Дата ({self.data['date']}): ", self.data['date'])
             
         
     def generate_key(self, password: str, salt: bytes) -> bytes:
@@ -143,23 +152,70 @@ class SafetyStorage:
     
         
 class TelegramConnect:
-    def __init__(self):
-        self.api_id = None
-        self.api_hash = None
-        self.proxy_type = python_socks.ProsyType.SOCK5
-        self.proxy_host = "127.0.0.1"
-        self.proxy_port = 1443
-        self.proxy_user = None
-        self.proxy_password = None
+    def __init__(self, storage):
+        self.storage = storage
+        self.packed = []
+        if self.storage.data["is_proxy"]:
+            
+            mtproto = (self.storage.data["proxy_host"], int(self.storage.data["proxy_port"]), self.storage.data["proxy_secret"])
+            mtproto_connection = connection.tcpmtproxy.ConnectionTcpMTProxyAbridged
+            self.client = telethon.TelegramClient('session',api_id=self.storage.data["api_id"],api_hash=self.storage.data["api_hash"],proxy=mtproto,connection=mtproto_connection)
+
+        else:
+            self.client = TelegramClient('autofillgeo', self.storage.data["api_id"], self.storage.data["api_hash"])
+
+        with self.client:
+            self.client.loop.run_until_complete(self.start_client())
+            self.client.loop.run_until_complete(self.find_message())
+
+    async def start_client(self):
+        await self.client.start()
+        me = await self.client.get_me()
+        print(f'Привет, {me.first_name}! Соединение успешно установлено.')
+
+        
+
+    async def find_message(self):
+        try:
+            target_date = datetime.strptime(self.storage.data["date"], "%Y-%m-%d").date()
+        except:
+            raise ValueError("❌ Неверный формат даты. Используйте ГГГГ-ММ-ДД.")
+        
+        start_of_day = datetime.combine(target_date, datetime.min.time(), tzinfo=timezone.utc)
+        end_of_day = datetime.combine(target_date, datetime.max.time(), tzinfo=timezone.utc)
+
+        os.makedirs(self.storage.data["path"], exist_ok=True)
+        async for message in self.client.iter_messages('me', offset_date=end_of_day):
+            if message.date < start_of_day:
+                break
+            text = message.text.split(" ")
+            if text[-1].isdigit() and text[0].split("-")[0] in ["ТСП-ОП", "ОП", "ГТСП"] and message.photo:
+                name_point = " ".join(text[:-1])
+                high_point = int(text[-1])
+                print(f"Найдено имя: {name_point}, высота {high_point}")
+                full_path =  f"{self.storage.data['path']}\\{name_point}"
+                os.makedirs(full_path, exist_ok=True)
+                self.packed.append(Pack(name_dir=name_point, high=high_point))
+                idx = 1
+                async for msg in self.client.iter_messages('me', limit=60, min_id=message.id - 30, max_id=message.id + 30):
+                    full_path_img = os.path.join(full_path, f"{idx}.jpg")
+                    if msg.grouped_id == message.grouped_id:
+                        if not os.path.isfile(full_path_img):
+                            await self.client.download_media(msg, file=full_path_img)
+                        idx += 1
+                        await asyncio.sleep(0.5)
+        
+        
+            
 
 class AutoXML:
 
     def __init__(self):
         self.storage = SafetyStorage()
+        self.tg = TelegramConnect(self.storage)
         self.source_path = "\\".join(os.path.abspath(__file__).split("\\")[:-1])
 
     def search_into_directory(self, path):
-        list_= []
         for dir_ in os.listdir(path):
             dir_path = f"{path}\\{dir_}"
             if os.path.isdir(dir_path):
@@ -171,8 +227,11 @@ class AutoXML:
 
                 if len(file_name) != 1:
                     raise ValueError(f"Слишком много файлов .jps в одной папке {dir_}")
-                list_.append(Pack(dir_, file_name[0], os.path.getsize(f"{dir_path}\\{file_name[0]}.jps")))
-        return list_
+                for pck in self.tg.packed:
+                    if pck.name_dir == dir_:
+                        pck.size_file = str(round(os.path.getsize(f"{dir_path}\\{file_name[0]}.jps") / 1024 / 1024, 1)).replace(",", ".")
+                        pck.name_file = file_name[0]
+
 
 
     def full_copy_paste(self, copy_target, paste_target):
@@ -215,13 +274,15 @@ class AutoXML:
         ws[f'A{number_string}'] = string.name
         ws[f'B{number_string}'] = string.name_dir
         ws[f'H{number_string}'] = string.name_file
+        ws[f'G{number_string}'] = string.high
         ws[f'I{number_string}'] = string.size_file
                 
                 
         
     def run(self):
-        list_information = self.search_into_directory(self.storage.data["path"])
-        self.create_XML(list_information)
+        input("Можно создать XML файл? ")
+        self.search_into_directory(self.storage.data["path"])
+        self.create_XML(self.tg.packed)
         
 
 
