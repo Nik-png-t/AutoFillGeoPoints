@@ -213,6 +213,7 @@ class AutoXML:
     def __init__(self):
         self.storage = SafetyStorage()
         self.tg = TelegramConnect(self.storage)
+        folder_distribution_of_files(f"{'\\'.join(self.storage.data['path'].split('/')[:-1])}\\Новая папка", self.storage.data["path"], self.tg.packed)
         self.source_path = "\\".join(os.path.abspath(__file__).split("\\")[:-1])
 
     def search_into_directory(self, path):
@@ -220,17 +221,23 @@ class AutoXML:
             dir_path = f"{path}\\{dir_}"
             if os.path.isdir(dir_path):
                 
-                file_name = []
+                file_names = []
                 for name in os.listdir(dir_path):
                     if name[-4:] == ".jps":
-                        file_name.append(name[:-4])
+                        file_names.append(name[:-4])
 
-                if len(file_name) != 1:
+                if len(file_names) != 1:
                     raise ValueError(f"Слишком много файлов .jps в одной папке {dir_}")
+                is_ = False
+                name_file = file_names[0]
+                size_file = str(round(os.path.getsize(f"{dir_path}\\{file_names[0]}.jps") / 1024 / 1024, 1)).replace(",", ".")
                 for pck in self.tg.packed:
                     if pck.name_dir == dir_:
-                        pck.size_file = str(round(os.path.getsize(f"{dir_path}\\{file_name[0]}.jps") / 1024 / 1024, 1)).replace(",", ".")
-                        pck.name_file = file_name[0]
+                        pck.size_file = size_file
+                        pck.name_file = name_file
+                        is_ = True
+                if not is_:
+                    self.tg.packed.append(Pack(name_dir=dir_, name_file=name_file, size_file=size_file, high=None))
 
 
 
@@ -263,7 +270,8 @@ class AutoXML:
         ws.delete_rows(idx=5)
         ws.merge_cells(f"B{number_of_end_string-1}:I{number_of_end_string-1}")
         ws.row_dimensions[5].height = 15
-        for i, info in enumerate(list_info):
+        sorted_list_info = sorted(list_info, key=lambda x: x.name_dir)
+        for i, info in enumerate(sorted_list_info):
             self.full_copy_paste_string(ws, 4, 4+i, 10)
             self.fill_string(ws, 4+i, info)
             
@@ -276,17 +284,85 @@ class AutoXML:
         ws[f'H{number_string}'] = string.name_file
         ws[f'G{number_string}'] = string.high
         ws[f'I{number_string}'] = string.size_file
-                
-                
-        
+                        
     def run(self):
         input("Можно создать XML файл? ")
         self.search_into_directory(self.storage.data["path"])
         self.create_XML(self.tg.packed)
+
+        
+def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
+    jps_files = os.listdir(path_to_files)
+    empty_folder = []
+    folder_base = None
+    
+    # отсеиваем только папки без .jps файла в них
+    for folder in os.listdir(path_to_folders):
+        full_path_to_folder = f"{path_to_folders}\\{folder}"
+        if os.path.isdir(full_path_to_folder) and "jps" not in [file.split(".")[-1] for file in os.listdir(full_path_to_folder)]:
+            if "ГТСП" == folder.split("-")[0] or "ГТСП" == folder.split(" ")[0]:
+                print("Пустая папка ГТСП найдена")
+                folder_base = folder
+            else:
+                empty_folder.append(folder)
+                print(f"Пустая папка {folder}")
+                
+    # подсчитываем сколько файлов от каждого приемника
+    count_of_type_jps_files = {}
+    for file in jps_files:
+        file_name = file.split("_")[0]
+        if file_name in list(count_of_type_jps_files):
+            count_of_type_jps_files[file_name].append(file)
+        else:
+            count_of_type_jps_files[file_name] = [file]
+            
+    # отсеиваем базу
+    if folder_base is not None:
+        for file_name, files in count_of_type_jps_files.items():
+            if len(files) == 1:
+                print(f"Найдена база {files[0]}")
+                count_of_type_jps_files.pop(file_name)
+                move_file(f"{path_to_files}\\{files[0]}", f"{path_to_folders}\\folder_base")
+                break
+        
+    # распределение файлов
+    file_names = list(count_of_type_jps_files.keys())
+    print(count_of_type_jps_files)
+    if len(file_names) == 1:
+        print("Применена одиночная сортировка")
+        files = count_of_type_jps_files[file_names[0]]
+        for pack_info in list_info:
+            if pack_info.name_dir in empty_folder:
+                if len(files):
+                    print(files[0], pack_info.name_dir)
+                    move_file(f"{path_to_files}\\files[0]", f"{path_to_folders}\\{pack_info.name_dir}")
+                    files.pop(0)
+    elif len(file_names) == 2:
+        type_ = input(f"Какой тип двойной сортировки выберите первый файл (1 вариант: {file_names[0]}, 2 вариант: {file_names[1]} )")
+        if not type_:
+            type_ = 0
+        else:
+            type_ = int(type_)-1
+
+        files = []
+        for i in range(len(count_of_type_jps_files[file_names[0]])):
+            if type_:
+                x = -1
+            else:
+                x = 0
+            files.append(count_of_type_jps_files[file_names[x]][i])
+            files.append(count_of_type_jps_files[file_names[x+1]][i])
+            
+                
+        for pack_info in list_info[::-1]:
+            if pack_info.name_dir in empty_folder:
+                if len(files):
+                    print(files[0], pack_info.name_dir)
+                    os.rename(f"{path_to_files}\\{files[0]}", f"{path_to_folders}\\{pack_info.name_dir}\\{files[0]}")
+                    files.pop(0)
+
         
 
-
-            
 
 if __name__ == "__main__":
     auto_xml = AutoXML()
