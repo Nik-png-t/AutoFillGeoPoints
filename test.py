@@ -6,6 +6,7 @@ from copy import copy
 import json
 import asyncio
 from datetime import datetime, timezone, date
+import re
 # telegram
 import python_socks
 from telethon import TelegramClient, sync, utils, connection
@@ -56,8 +57,7 @@ class SafetyStorage:
                 "proxy_port": proxy_port,
                 "proxy_secret": proxy_secret,
                 "name": name,
-                "path": path,
-                "date": target_date
+                "path": path
             }
             self.save_data()
             return
@@ -120,9 +120,13 @@ class SafetyStorage:
                 self.data['proxy_host'] = self.not_any_way_answer("Новый прокси host: ", self.data['proxy_host'])
                 self.data['proxy_port'] = self.not_any_way_answer("Новый прокси port: ", self.data['proxy_port'])
                 self.data['proxy_secret'] = self.not_any_way_answer("Новый прокси secret: ", self.data['proxy_secret'])
-        self.data['name'] = self.not_any_way_answer(f"Имя файла xml({self.data['name']}): ", self.data['name'])
-        self.data['path'] = self.not_any_way_answer(f"Путь до директории({self.data['path']}): ", self.data['path'])
-        self.data['date'] = self.not_any_way_answer(f"Дата ({self.data['date']}): ", self.data['date'])
+        today = date.today().strftime("%Y-%m-%d")
+        self.data['date'] = self.not_any_way_answer(f"Дата ({today}): ", today)
+        name = re.sub(r"\d{4}([_-]\d{2}){2}", self.data['date'], self.data['name'])
+        path = re.sub(r"\d{4}([_-]\d{2}){2}", self.data['date'], self.data['path'])
+        self.data['name'] = self.not_any_way_answer(f"Имя файла xml({name}): ", name)
+        self.data['path'] = self.not_any_way_answer(f"Путь до директории({path}): ", path)
+        
             
         
     def generate_key(self, password: str, salt: bytes) -> bytes:
@@ -213,7 +217,7 @@ class AutoXML:
     def __init__(self):
         self.storage = SafetyStorage()
         self.tg = TelegramConnect(self.storage)
-        folder_distribution_of_files(f"{'\\'.join(self.storage.data['path'].split('/')[:-1])}\\Новая папка", self.storage.data["path"], self.tg.packed)
+        folder_distribution_of_files(f"{'\\'.join(self.storage.data['path'].split('\\')[:-1])}\\Новая папка", self.storage.data["path"], self.tg.packed)
         self.source_path = "\\".join(os.path.abspath(__file__).split("\\")[:-1])
 
     def search_into_directory(self, path):
@@ -327,7 +331,6 @@ def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
         
     # распределение файлов
     file_names = list(count_of_type_jps_files.keys())
-    print(count_of_type_jps_files)
     if len(file_names) == 1:
         print("Применена одиночная сортировка")
         files = count_of_type_jps_files[file_names[0]]
@@ -338,7 +341,7 @@ def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
                     move_file(f"{path_to_files}\\files[0]", f"{path_to_folders}\\{pack_info.name_dir}")
                     files.pop(0)
     elif len(file_names) == 2:
-        type_ = input(f"Какой тип двойной сортировки выберите первый файл (1 вариант: {file_names[0]}, 2 вариант: {file_names[1]} )")
+        type_ = input(f"Какой тип двойной сортировки выберите первый файл (1 вариант: {file_names[0]}, 2 вариант: {file_names[1]}): ")
         if not type_:
             type_ = 0
         else:
