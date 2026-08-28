@@ -326,7 +326,7 @@ def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
             if len(files) == 1:
                 print(f"Найдена база {files[0]}")
                 count_of_type_jps_files.pop(file_name)
-                move_file(f"{path_to_files}\\{files[0]}", f"{path_to_folders}\\folder_base")
+                os.rename(f"{path_to_files}\\{files[0]}", f"{path_to_folders}\\{folder_base}\\{files[0]}")
                 break
         
     # распределение файлов
@@ -338,7 +338,7 @@ def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
             if pack_info.name_dir in empty_folder:
                 if len(files):
                     print(files[0], pack_info.name_dir)
-                    move_file(f"{path_to_files}\\files[0]", f"{path_to_folders}\\{pack_info.name_dir}")
+                    os.rename(f"{path_to_files}\\{files[0]}", f"{path_to_folders}\\{pack_info.name_dir}\\{files[0]}")
                     files.pop(0)
     elif len(file_names) == 2:
         type_ = input(f"Какой тип двойной сортировки выберите первый файл (1 вариант: {file_names[0]}, 2 вариант: {file_names[1]}): ")
