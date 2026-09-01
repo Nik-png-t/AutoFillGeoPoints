@@ -18,16 +18,13 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 class Pack:
-    def __init__(self, name_dir=None, name_file=None, size_file=None, high=None):
-        self.name = ""
+    def __init__(self, name_dir=None, name_file=None, size_file=None, high=None, receiver_number=None):
+        self.name = name_dir.split("-")[0] # [ГТСП, ОП, ТСП, ТСП-ОП]
         self.high = high
-        for i in name_dir:
-            if i == "-":
-                break
-            self.name += i 
-        self.name_dir = name_dir
-        self.name_file = name_file
+        self.name_dir = name_dir # полное название
+        self.name_file = name_file # название файла .jps
         self.size_file = size_file
+        self.receiver_number = self.receiver_number
 
 class SafetyStorage:
     def __init__(self):
@@ -194,12 +191,18 @@ class TelegramConnect:
                 break
             text = message.text.split(" ")
             if text[-1].isdigit() and text[0].split("-")[0] in ["ТСП-ОП", "ОП", "ГТСП"] and message.photo:
-                name_point = " ".join(text[:-1])
-                high_point = int(text[-1])
-                print(f"Найдено имя: {name_point}, высота {high_point}")
+                if text[-2].isdigit():
+                    receiver_number = int(text[-1])
+                    name_point = " ".join(text[:-2])
+                    high_point = int(text[-2])
+                else:
+                    name_point = " ".join(text[:-1])
+                    high_point = int(text[-1])
+                    receiver_number = None
+                print(f"Найдено имя: {name_point}, высота {high_point}, номер приемника {receiver_number}")
                 full_path =  f"{self.storage.data['path']}\\{name_point}"
                 os.makedirs(full_path, exist_ok=True)
-                self.packed.append(Pack(name_dir=name_point, high=high_point))
+                self.packed.append(Pack(name_dir=name_point, high=high_point, receiver_number=receiver_number))
                 idx = 1
                 async for msg in self.client.iter_messages('me', limit=60, min_id=message.id - 30, max_id=message.id + 30):
                     full_path_img = os.path.join(full_path, f"{idx}.jpg")
@@ -296,9 +299,10 @@ class AutoXML:
 
         
 def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
+    input("Начать распределение файлов: ")
     jps_files = os.listdir(path_to_files)
     empty_folder = []
-    folder_base = None
+    folder_bases = []
     
     # отсеиваем только папки без .jps файла в них
     for folder in os.listdir(path_to_folders):
@@ -306,7 +310,7 @@ def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
         if os.path.isdir(full_path_to_folder) and "jps" not in [file.split(".")[-1] for file in os.listdir(full_path_to_folder)]:
             if "ГТСП" == folder.split("-")[0] or "ГТСП" == folder.split(" ")[0]:
                 print("Пустая папка ГТСП найдена")
-                folder_base = folder
+                folder_bases.append(folder)
             else:
                 empty_folder.append(folder)
                 print(f"Пустая папка {folder}")
@@ -319,17 +323,41 @@ def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
             count_of_type_jps_files[file_name].append(file)
         else:
             count_of_type_jps_files[file_name] = [file]
-            
-    # отсеиваем базу
-    if folder_base is not None:
-        for file_name, files in count_of_type_jps_files.items():
-            if len(files) == 1:
-                print(f"Найдена база {files[0]}")
-                count_of_type_jps_files.pop(file_name)
-                os.rename(f"{path_to_files}\\{files[0]}", f"{path_to_folders}\\{folder_base}\\{files[0]}")
-                break
-        
-    # распределение файлов
+    
+    
+    # отсеиваем базу или базы
+    if len(folder_bases):
+        #folder_base = [ГТСП-2, ГТСП-3 Ульт-Ягун]
+        #base_files = [purple, [23_purple.jps]), (white, [white.jps])]
+        #list_info = [.name_dir=ГТСП-2, .receiver_number=12]
+        base_files = {{file_name: files} for file_name, files in count_of_type_jps_files.items() if len(files) == 1}
+        for info in list_info:
+            if info.name_dir in folder_bases and info.receiver_number is not None:
+                base_file_name = change_rec_num_to_file(info.receiver_number) # purple, white, black
+                if base_file_name in base_files.keys():
+                    base_file = base_files[base_file_name][0]
+                else:
+                    raise ValueError("Указаный {base_file_name} not in {base_files.keys()}")
+                print(f"Найдена база {info.name_dir} = {base_file}")
+                os.rename(f"{path_to_files}\\{base_file}", f"{path_to_folders}\\{info.name_dir}\\{base_file}")
+                folder_bases.pop(info.name_dir)
+                base_files.pop(base_file_name)
+                count_of_type_jps_files.pop(base_file_name)
+                
+        if len(base_files) == 1:
+            file_name = base_files.keys()[0]
+            file = base_files[file_name][0]
+            print(f"Найдена база {folder_bases[0]} = {file}")
+            count_of_type_jps_files.pop(file_name)
+            os.rename(f"{path_to_files}\\{file}", f"{path_to_folders}\\{folder_bases[0]}\\{file}")
+        else:
+            input("Не получилось переместить файлы. Сделайте самостоятельно")
+
+
+    # распределяем помеченые файлы
+    if
+    # -> queue = [None, purple, purple, None, None, None]
+    # распределяем остальные файлы
     file_names = list(count_of_type_jps_files.keys())
     if len(file_names) == 1:
         print("Применена одиночная сортировка")
@@ -341,12 +369,14 @@ def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
                     os.rename(f"{path_to_files}\\{files[0]}", f"{path_to_folders}\\{pack_info.name_dir}\\{files[0]}")
                     files.pop(0)
     elif len(file_names) == 2:
+        
         type_ = input(f"Какой тип двойной сортировки выберите первый файл (1 вариант: {file_names[0]}, 2 вариант: {file_names[1]}): ")
         if not type_:
             type_ = 0
         else:
             type_ = int(type_)-1
 
+        queue_files = [None for i in range(len(empty_folder))]
         files = []
         for i in range(len(count_of_type_jps_files[file_names[0]])):
             if type_:
@@ -355,7 +385,9 @@ def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
                 x = 0
             files.append(count_of_type_jps_files[file_names[x]][i])
             files.append(count_of_type_jps_files[file_names[x+1]][i])
-            
+        for i, q in enumerate(queue_files):
+            if q is None:
+                queue_files[i] = files.pop(0)
                 
         for pack_info in list_info[::-1]:
             if pack_info.name_dir in empty_folder:
