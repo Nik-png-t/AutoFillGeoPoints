@@ -35,7 +35,7 @@ class SafetyStorage:
             password = self.any_way_answer("Новый пароль: ")
             api_id = self.any_way_answer("Новый API ID: ")
             api_hash = self.any_way_answer("Новый API HASH: ")
-            is_proxy = bool(self.any_way_answer("Нужен прокси: "))
+            is_proxy = bool(self.any_way_answer("Нужен прокси(yes/no): "))
             if is_proxy:
                 proxy_host = self.any_way_answer("Нужен прокси host: ")
                 proxy_port = self.any_way_answer("Нужен прокси port: ")
@@ -107,7 +107,7 @@ class SafetyStorage:
             self.data['password'] = self.not_any_way_answer("Новый пароль: ", self.data['password'])
             self.data['api_id'] = self.not_any_way_answer("Новый API ID: ", self.data['api_id'])
             self.data['api_hash'] = self.not_any_way_answer("Новый API HASH: ", self.data['api_hash'])
-            is_proxy = input("Нужен прокси: ")
+            is_proxy = input("Нужен прокси(yes/no): ")
             if is_proxy == "no":
                 self.data['is_proxy'] = False
             elif is_proxy == "yes" or self.data["is_proxy"]:
