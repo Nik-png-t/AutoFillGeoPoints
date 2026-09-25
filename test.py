@@ -1,5 +1,5 @@
 #main
-import sys, os
+import  os
 from openpyxl import load_workbook
 import time
 from copy import copy
@@ -9,15 +9,17 @@ from datetime import datetime, timezone, date
 import re
 from itertools import cycle
 import shutil
+from pathlib import Path
 # telegram
-import python_socks
-from telethon import TelegramClient, sync, utils, connection
+from telethon import TelegramClient, connection
 import telethon
 #crypto
 import base64
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+# PyInstaller --onefile --add-data "pattern.xlsx;." test.py
 
 class Pack:
     def __init__(self, name_dir=None, name_file=None, size_file=None, high=None, receiver_name=None):
@@ -35,7 +37,7 @@ class SafetyStorage:
             password = self.any_way_answer("Новый пароль: ")
             api_id = self.any_way_answer("Новый API ID: ")
             api_hash = self.any_way_answer("Новый API HASH: ")
-            is_proxy = bool(self.any_way_answer("Нужен прокси(yes/no): "))
+            is_proxy = bool(self.any_way_answer("Нужен прокси: "))
             if is_proxy:
                 proxy_host = self.any_way_answer("Нужен прокси host: ")
                 proxy_port = self.any_way_answer("Нужен прокси port: ")
@@ -107,7 +109,7 @@ class SafetyStorage:
             self.data['password'] = self.not_any_way_answer("Новый пароль: ", self.data['password'])
             self.data['api_id'] = self.not_any_way_answer("Новый API ID: ", self.data['api_id'])
             self.data['api_hash'] = self.not_any_way_answer("Новый API HASH: ", self.data['api_hash'])
-            is_proxy = input("Нужен прокси(yes/no): ")
+            is_proxy = input("Нужен прокси: ")
             if is_proxy == "no":
                 self.data['is_proxy'] = False
             elif is_proxy == "yes" or self.data["is_proxy"]:
@@ -214,7 +216,7 @@ class TelegramConnect:
             if message.date < start_of_day:
                 break
             text = message.text.split(" ")
-            if text[-1].isdigit() and text[0].split("-")[0] in ["ТСП", "ОП", "ГТСП"] and message.photo:
+            if text[-1].isdigit() and text[0].split("-")[0] in ["ТСП", "ОП", "ГТСП", "ГП"] and message.photo:
                 if text[-2].isdigit():
                     name_point = " ".join(text[:-2])
                     high_point = int(text[-2])
@@ -244,8 +246,11 @@ class AutoXML:
     def __init__(self):
         self.storage = SafetyStorage()
         self.tg = TelegramConnect(self.storage)
-        folder_distribution_of_files(f"{'\\'.join(self.storage.data['path'].split('\\')[:-1])}\\Новая папка", self.storage.data["path"], self.tg.packed)
-        self.source_path = "\\".join(os.path.abspath(__file__).split("\\")[:-1])
+        try:
+            folder_distribution_of_files(f"{'\\'.join(self.storage.data['path'].split('\\')[:-1])}\\Новая папка", self.storage.data["path"], self.tg.packed)
+        except Exception as e:
+            print(f"Распределение не сработало по ошибке: {e}")
+        self.source_path = str(Path(__file__).resolve().parent)
 
     def search_into_directory(self, path):
         for dir_ in os.listdir(path):
@@ -321,7 +326,7 @@ class AutoXML:
         input("Можно создать XML файл? ")
         self.search_into_directory(self.storage.data["path"])
         self.create_XML(self.tg.packed, self.storage.data['path'], self.storage.data['name'])
-        if input("Нужно создать XML для полетов мавика?: "):
+        if [1 for pack in self.tg.packed if pack.name == "ТСП"] and input("Нужно создать XML для полетов мавика?: "):
             list_packed_for_flight = [pack for pack in self.tg.packed if pack.name in ["ГТСП", "ТСП"]]
             name_directory = self.storage.data['date'] + " " + ", ".join(set(re.findall(r'\d+', pack.name_dir)[0] for pack in list_packed_for_flight if pack.name=="ТСП"))
             path_for_flight = f"{'\\'.join(self.storage.data['path'].split('\\')[:-1])}\\{name_directory}"
@@ -329,11 +334,15 @@ class AutoXML:
                 shutil.copytree(self.storage.data['path'], path_for_flight)
             except OSError:
                 print("Копирование не будет выполнено папка уже существует")
-            for n in os.listdir(path_for_flight):
-                if os.path.isdir(f'{path_for_flight}\\{n}') and "ТСП-ОП" not in n and "ГТСП" not in n:
-                    shutil.rmtree(f'{path_for_flight}\\{n}')
+            try:
+                for n in os.listdir(path_for_flight):
+                    if os.path.isdir(f'{path_for_flight}\\{n}') and "ТСП-ОП" not in n and "ГТСП" not in n:
+                        shutil.rmtree(f'{path_for_flight}\\{n}')
+            except OSError:
+                print("Удаление папок не будет выполнено(возможно нет права доступа)")
 
             self.create_XML(list_packed_for_flight, path_for_flight, f"{self.storage.data['date']}_ТСП_под_полёты")
+            os.remove(f"{path_for_flight}\\{self.storage.data['name']}")
 
         
 def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
@@ -432,6 +441,10 @@ def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
 
 
 if __name__ == "__main__":
-    auto_xml = AutoXML()
-    auto_xml.run()
-    time.sleep(3)
+    try:
+        auto_xml = AutoXML()
+        auto_xml.run()
+        time.sleep(3)
+    except Exception as e:
+        print(e)
+        time.sleep(10000)
