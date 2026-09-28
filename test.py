@@ -10,6 +10,7 @@ import re
 from itertools import cycle
 import shutil
 from pathlib import Path
+from colorama import Fore, Back, Style, init as colorama_init
 # telegram
 from telethon import TelegramClient, connection
 import telethon
@@ -20,6 +21,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 # PyInstaller --onefile --add-data "pattern.xlsx;." test.py
+colorama_init()
 
 class Pack:
     def __init__(self, name_dir=None, name_file=None, size_file=None, high=None, receiver_name=None):
@@ -70,11 +72,11 @@ class SafetyStorage:
         
         try:
             data = self.decrypt_data(data_crypted, password, used_salt)
-            self.data = json.loads(data)
-            print(f"Успешно расшифровано")
-            
+            self.data = json.loads(data)# Инициализация для Windows
+            print(Fore.GREEN +  f"Успешно расшифровано" + Style.RESET_ALL)
+
         except Exception as e:
-            raise ValueError(f"\nОшибка расшифровки! Неверный пароль или данные повреждены. {e}")
+            raise ValueError(Fore.RED +  f"\nОшибка расшифровки! Неверный пароль или данные повреждены. {e}"+ Style.RESET_ALL)
         self.question_print_data()
         self.question_change_data()
         self.save_data()
@@ -192,7 +194,7 @@ class TelegramConnect:
     async def start_client(self):
         await self.client.start()
         me = await self.client.get_me()
-        print(f'Привет, {me.first_name}! Соединение успешно установлено.')
+        print(Fore.GREEN + f'Привет, {me.first_name}! Соединение успешно установлено.' + Style.RESET_ALL)
 
     def change_rec_num_to_file(self, number):
         if number not in self.storage.data["receiver_names"].keys() and str(number) not in self.storage.data["receiver_names"].keys():
@@ -203,10 +205,11 @@ class TelegramConnect:
 
 
     async def find_message(self):
+        dict_count = dict()
         try:
             target_date = datetime.strptime(self.storage.data["date"], "%Y-%m-%d").date()
         except:
-            raise ValueError("❌ Неверный формат даты. Используйте ГГГГ-ММ-ДД.")
+            raise ValueError(Fore.RED + "❌ Неверный формат даты. Используйте ГГГГ-ММ-ДД." + Style.RESET_ALL)
         
         start_of_day = datetime.combine(target_date, datetime.min.time(), tzinfo=timezone.utc)
         end_of_day = datetime.combine(target_date, datetime.max.time(), tzinfo=timezone.utc)
@@ -225,10 +228,14 @@ class TelegramConnect:
                     name_point = " ".join(text[:-1])
                     high_point = int(text[-1])
                     receiver_name = None
-                print(f"Найдено имя: {name_point}, высота {high_point}, название приемника {receiver_name}")
+                print(Fore.CYAN + f"Найдено имя: {name_point}, высота {high_point}{f', название приемника {receiver_name}' if receiver_name is not None else ''}" + Style.RESET_ALL)
+
                 full_path =  f"{self.storage.data['path']}\\{name_point}"
                 os.makedirs(full_path, exist_ok=True)
                 self.packed.append(Pack(name_dir=name_point, high=high_point, receiver_name=receiver_name))
+                if self.packed[-1].name not in dict_count.keys():
+                    dict_count[self.packed[-1].name] = 0
+                dict_count[self.packed[-1].name] += 1
                 idx = 1
                 async for msg in self.client.iter_messages('me', limit=60, min_id=message.id - 30, max_id=message.id + 30):
                     full_path_img = os.path.join(full_path, f"{idx}.jpg")
@@ -237,6 +244,9 @@ class TelegramConnect:
                             await self.client.download_media(msg, file=full_path_img)
                         idx += 1
                         await asyncio.sleep(0.5)
+        for name, count in dict_count.items():
+            print(Fore.YELLOW + f"{name}: {count}" + Style.RESET_ALL)
+
         
         
             
@@ -249,7 +259,7 @@ class AutoXML:
         try:
             folder_distribution_of_files(f"{'\\'.join(self.storage.data['path'].split('\\')[:-1])}\\Новая папка", self.storage.data["path"], self.tg.packed)
         except Exception as e:
-            print(f"Распределение не сработало по ошибке: {e}")
+            print(Fore.LIGHTRED_EX + f"Распределение не сработало по ошибке: {e}\nСделайте сами!" + Style.RESET_ALL)
         self.source_path = str(Path(__file__).resolve().parent)
 
     def search_into_directory(self, path):
@@ -263,7 +273,7 @@ class AutoXML:
                         file_names.append(name[:-4])
 
                 if len(file_names) != 1:
-                    raise ValueError(f"Слишком много файлов .jps в одной папке {dir_}")
+                    raise ValueError(Fore.RED + f"Слишком много файлов .jps в одной папке {dir_}" + Style.RESET_ALL)
                 is_ = False
                 name_file = file_names[0]
                 size_file = str(round(os.path.getsize(f"{dir_path}\\{file_names[0]}.jps") / 1024 / 1024, 1)).replace(",", ".")
@@ -356,11 +366,11 @@ def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
         full_path_to_folder = f"{path_to_folders}\\{folder}"
         if os.path.isdir(full_path_to_folder) and "jps" not in [file.split(".")[-1] for file in os.listdir(full_path_to_folder)]:
             if "ГТСП" == folder.split("-")[0] or "ГТСП" == folder.split(" ")[0]:
-                print("Пустая папка ГТСП найдена")
+                print(Fore.LIGHTYELLOW_EX + f"Пустая папка ГТСП найдена: {folder}" + Style.RESET_ALL)
                 folder_bases.append(folder)
             else:
                 empty_folder.append(folder)
-                print(f"Пустая папка {folder}")
+                print(Fore.YELLOW + f"Пустая папка: {folder}" + Style.RESET_ALL)
                 
     # подсчитываем сколько файлов от каждого приемника
     count_of_type_jps_files = {}
@@ -403,14 +413,14 @@ def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
     queue_files = [info.receiver_name for info in list_info if info.name != "ГТСП"][::-1]
     jps_files_name_iter = cycle(count_of_type_jps_files.keys())
 
-
+    print(count_of_type_jps_files)
     if len(count_of_type_jps_files.keys()) == 2 and None in queue_files:
         type_ = input(
             f"Какой тип двойной сортировки выберите первый файл (1 вариант: {next(jps_files_name_iter)}, 2 вариант: {next(jps_files_name_iter)}): ")
         if type_ == "2":
             jps_files_name_iter = cycle(list(count_of_type_jps_files.keys())[::-1])
     elif len(count_of_type_jps_files.keys()) == 0:
-        print("Файлы не найдены.Распределения не будет!")
+        print(Fore.RED + "Файлы не найдены.Распределения не будет!" + Style.RESET_ALL)
         return
 
     skip_ = False
@@ -427,16 +437,19 @@ def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
         if value in count_of_type_jps_files.keys() and not len(count_of_type_jps_files[value]):
             count_of_type_jps_files.pop(value)
             if not len(count_of_type_jps_files.keys()):
-                print("Не хватило файлов для полного распределения!!!")
+                print(Fore.RED + "Не хватило файлов для полного распределения!!!" + Style.RESET_ALL)
+                raise ValueError
                 queue_files = queue_files[:i]
                 break
         queue_files[i] = count_of_type_jps_files[value].pop(0)
-
+    if len(count_of_type_jps_files.keys()):
+        print(Fore.RED + "Не хватило папок для распределения!!!" + Style.RESET_ALL)
+        raise ValueError
     for pack_info in list_info[::-1]:
         if pack_info.name_dir in empty_folder:
             if len(queue_files):
                 file = queue_files.pop(0)
-                print(file, pack_info.name_dir)
+                print(Fore.GREEN + f"{file}  =  {pack_info.name_dir}" + Style.RESET_ALL)
                 os.rename(f"{path_to_files}\\{file}", f"{path_to_folders}\\{pack_info.name_dir}\\{file}")
 
 
@@ -446,5 +459,5 @@ if __name__ == "__main__":
         auto_xml.run()
         time.sleep(3)
     except Exception as e:
-        print(e)
+        print(Fore.RED, e, Style.RESET_ALL)
         time.sleep(10000)
