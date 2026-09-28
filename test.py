@@ -392,7 +392,7 @@ def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
                 count_of_type_jps_files.pop(base_file_name)
                 
         if len(list(base_files)) == 1:
-            file_name = base_files.keys()[0]
+            file_name = list(base_files.keys())[0]
             file = base_files[file_name][0]
             print(f"Найдена база {folder_bases[0]} = {file}")
             count_of_type_jps_files.pop(file_name)
