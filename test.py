@@ -25,7 +25,7 @@ colorama_init()
 
 class Pack:
     def __init__(self, name_dir=None, name_file=None, size_file=None, high=None, receiver_name=None):
-        for name in ["ГТСП", "ОП", "ТСП-ОП", "ГП", "ТСП"]:
+        for name in ["ТСП", "ОП", "ТСП-ОП", "ГП", "ГТСП"]:
             if re.search(rf"{name}", name_dir) is not None:
                 self.name = name
         self.high = high
@@ -340,7 +340,8 @@ class AutoXML:
         self.create_XML([pack for pack in self.tg.packed if pack.name != "ТСП"], self.storage.data['path'], self.storage.data['name'])
         if [1 for pack in self.tg.packed if pack.name in ["ТСП", "ТСП-ОП"]] and input("Нужно создать XML для полетов мавика?: "):
             list_packed_for_flight = [pack for pack in self.tg.packed if pack.name in ["ГТСП", "ТСП", "ТСП-ОП"]]
-            name_directory = self.storage.data['date'] + " " + ", ".join(set(re.findall(r'\d+', pack.name_dir)[0] for pack in list_packed_for_flight if pack.name=="ТСП"))
+            name_directory = self.storage.data['date'] + " " + ", ".join(set(re.findall(r'\d+', pack.name_dir)[0] for pack in list_packed_for_flight if pack.name=="ТСП-ОП"))
+            name_directory = name_directory.rstrip()
             path_for_flight = f"{'\\'.join(self.storage.data['path'].split('\\')[:-1])}\\{name_directory}"
             try:
                 shutil.copytree(self.storage.data['path'], path_for_flight)
@@ -354,7 +355,11 @@ class AutoXML:
                 print("Удаление папок не будет выполнено(возможно нет права доступа)")
 
             self.create_XML(list_packed_for_flight, path_for_flight, f"{self.storage.data['date']}_ТСП_под_полёты")
-            os.remove(f"{path_for_flight}\\{self.storage.data['name']}")
+            os.remove(f"{path_for_flight}\\{self.storage.data['name']}.xlsx")
+        for n in os.listdir(self.storage.data['path']):
+            print(n)
+            if os.path.isdir(f'{self.storage.data['path']}\\{n}') and "ТСП" in n and "ГТСП" not in n and "ТСП-ОП" not in n:
+                shutil.rmtree(f'{self.storage.data['path']}\\{n}')
 
         
 def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
