@@ -25,7 +25,9 @@ colorama_init()
 
 class Pack:
     def __init__(self, name_dir=None, name_file=None, size_file=None, high=None, receiver_name=None):
-        self.name = name_dir.split("-")[0] # [ГТСП, ОП, ТСП]
+        for name in ["ГТСП", "ОП", "ТСП-ОП", "ГП", "ТСП"]:
+            if re.search(rf"{name}", name_dir) is not None:
+                self.name = name
         self.high = high
         self.name_dir = name_dir # полное название
         self.name_file = name_file # название файла .jps
@@ -335,9 +337,9 @@ class AutoXML:
     def run(self):
         input("Можно создать XML файл? ")
         self.search_into_directory(self.storage.data["path"])
-        self.create_XML(self.tg.packed, self.storage.data['path'], self.storage.data['name'])
-        if [1 for pack in self.tg.packed if pack.name == "ТСП"] and input("Нужно создать XML для полетов мавика?: "):
-            list_packed_for_flight = [pack for pack in self.tg.packed if pack.name in ["ГТСП", "ТСП"]]
+        self.create_XML([pack for pack in self.tg.packed if pack.name != "ТСП"], self.storage.data['path'], self.storage.data['name'])
+        if [1 for pack in self.tg.packed if pack.name in ["ТСП", "ТСП-ОП"]] and input("Нужно создать XML для полетов мавика?: "):
+            list_packed_for_flight = [pack for pack in self.tg.packed if pack.name in ["ГТСП", "ТСП", "ТСП-ОП"]]
             name_directory = self.storage.data['date'] + " " + ", ".join(set(re.findall(r'\d+', pack.name_dir)[0] for pack in list_packed_for_flight if pack.name=="ТСП"))
             path_for_flight = f"{'\\'.join(self.storage.data['path'].split('\\')[:-1])}\\{name_directory}"
             try:
@@ -346,7 +348,7 @@ class AutoXML:
                 print("Копирование не будет выполнено папка уже существует")
             try:
                 for n in os.listdir(path_for_flight):
-                    if os.path.isdir(f'{path_for_flight}\\{n}') and "ТСП-ОП" not in n and "ГТСП" not in n:
+                    if os.path.isdir(f'{path_for_flight}\\{n}') and "ТСП-ОП" not in n and "ГТСП" not in n and "ТСП" not in n:
                         shutil.rmtree(f'{path_for_flight}\\{n}')
             except OSError:
                 print("Удаление папок не будет выполнено(возможно нет права доступа)")
