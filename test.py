@@ -24,18 +24,18 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 colorama_init()
 
 class Pack:
-    def __init__(self, name_dir=None, name_file=None, size_file=None, high=None, receiver_name=None):
-        for name in ["ТСП", "ОП", "ТСП-ОП", "ГП", "ГТСП"]:
-            if re.search(rf"{name}", name_dir) is not None:
-                self.name = name
+    def __init__(self, name_full=None, name_file=None, size_file=None, high=None, receiver_name=None):
+        self.name = re.search(r"(ГТСП)|(ТСП-ОП)|(ГП)|(ТСП)|(ОП)", name_full).group()
         self.high = high
-        self.name_dir = name_dir # полное название
+        self.name_full = name_full # полное название
         self.name_file = name_file # название файла .jps
         self.size_file = size_file
         self.receiver_name = receiver_name
 
 class SafetyStorage:
     def __init__(self):
+        self.name_session = "session1"
+
         if not os.path.exists('log.enc'):
             print("Файла log.bin нет, создаем...")
             password = self.any_way_answer("Новый пароль: ")
@@ -73,7 +73,7 @@ class SafetyStorage:
         data_crypted = self.data_crypted[16:]
         
         try:
-            data = self.decrypt_data(data_crypted, password, used_salt)
+            data = self.decrypt_data(data_crypted, password, used_salt).decode()
             self.data = json.loads(data)# Инициализация для Windows
             print(Fore.GREEN +  f"Успешно расшифровано" + Style.RESET_ALL)
 
@@ -83,10 +83,11 @@ class SafetyStorage:
         self.question_change_data()
         self.save_data()
 
+
     def save_data(self):
         data = json.dumps(self.data, ensure_ascii=False, indent=4)
         with open('log.enc', 'wb') as f:
-            encrypted_data, salt = self.encrypt_data(data, self.data['password'])
+            encrypted_data, salt = self.encrypt_data(data.encode(), self.data['password'])
             f.write(salt+encrypted_data)
             
     def any_way_answer(self, text):
@@ -110,7 +111,14 @@ class SafetyStorage:
 
     def question_change_data(self):
         if input("Изменить что-то: "):
-            self.data['password'] = self.not_any_way_answer("Новый пароль: ", self.data['password'])
+            new_password = self.not_any_way_answer("Новый пароль: ", self.data['password'])
+            if new_password != self.data['password']:
+                if os.path.isfile(f"{self.name_session}.enc"):
+                    self.decrypt_session_file()
+                    self.data['password'] = new_password
+                    self.encrypt_session_file()
+                else:
+                    self.data['password'] = new_password
             self.data['api_id'] = self.not_any_way_answer("Новый API ID: ", self.data['api_id'])
             self.data['api_hash'] = self.not_any_way_answer("Новый API HASH: ", self.data['api_hash'])
             is_proxy = input("Нужен прокси: ")
@@ -148,8 +156,20 @@ class SafetyStorage:
         self.data['name'] = self.not_any_way_answer(f"Имя файла xml({name}): ", name)
         self.data['path'] = self.not_any_way_answer(f"Путь до директории({path}): ", path)
         
-            
-        
+    def encrypt_session_file(self):
+        with open(f'{self.name_session}.enc', 'wb') as enc_file, open(f"{self.name_session}.session", 'rb') as session_file:
+            encrypted_data, salt = self.encrypt_data(session_file.read(), self.data['password'])
+            enc_file.write(salt + encrypted_data)
+        os.remove(f'{self.name_session}.session')
+
+    def decrypt_session_file(self):
+        with open(f'{self.name_session}.session', 'wb') as session_file, open(f'{self.name_session}.enc', 'rb') as enc_file:
+            enc_data = enc_file.read()
+            used_salt = enc_data[:16]
+            data_crypted = enc_data[16:]
+            data = self.decrypt_data(data_crypted, self.data['password'], used_salt)
+            session_file.write(data)
+
     def generate_key(self, password: str, salt: bytes) -> bytes:
         """Генерирует криптографический ключ на основе пароля и соли."""
         kdf = PBKDF2HMAC(
@@ -160,38 +180,41 @@ class SafetyStorage:
         )
         return base64.urlsafe_b64encode(kdf.derive(password.encode()))
     
-    def encrypt_data(self, data: str, password: str) -> tuple[bytes, bytes]:
+    def encrypt_data(self, data: bytes, password: str) -> tuple[bytes, bytes]:
         """Шифрует данные по паролю. Возвращает (зашифрованные_данные, соль)."""
         salt = os.urandom(16) 
         key = self.generate_key(password, salt)
         f = Fernet(key)
-        encrypted_data = f.encrypt(data.encode())
+        encrypted_data = f.encrypt(data)
         return encrypted_data, salt
 
-    def decrypt_data(self, encrypted_data: bytes, password: str, salt: bytes) -> str:
+    def decrypt_data(self, encrypted_data: bytes, password: str, salt: bytes) -> bytes:
         """Расшифровывает данные, используя исходный пароль и соль."""
         key = self.generate_key(password, salt)
         f = Fernet(key)
         decrypted_data = f.decrypt(encrypted_data)
-        return decrypted_data.decode()
+        return decrypted_data
     
         
 class TelegramConnect:
     def __init__(self, storage):
         self.storage = storage
         self.packed = []
+        if os.path.isfile(f"{self.storage.name_session}.enc"):
+            self.storage.decrypt_session_file()
         if self.storage.data["is_proxy"]:
             
             mtproto = (self.storage.data["proxy_host"], int(self.storage.data["proxy_port"]), self.storage.data["proxy_secret"])
             mtproto_connection = connection.tcpmtproxy.ConnectionTcpMTProxyAbridged
-            self.client = telethon.TelegramClient('session1',api_id=self.storage.data["api_id"],api_hash=self.storage.data["api_hash"],proxy=mtproto,connection=mtproto_connection)
+            self.client = telethon.TelegramClient(self.storage.name_session, api_id=self.storage.data["api_id"],api_hash=self.storage.data["api_hash"],proxy=mtproto,connection=mtproto_connection)
 
         else:
-            self.client = TelegramClient('autofillgeo1', self.storage.data["api_id"], self.storage.data["api_hash"])
+            self.client = TelegramClient(self.storage.name_session, self.storage.data["api_id"], self.storage.data["api_hash"])
 
         with self.client:
             self.client.loop.run_until_complete(self.start_client())
             self.client.loop.run_until_complete(self.find_message())
+        self.storage.encrypt_session_file()
 
     async def start_client(self):
         await self.client.start()
@@ -234,7 +257,7 @@ class TelegramConnect:
 
                 full_path =  f"{self.storage.data['path']}\\{name_point}"
                 os.makedirs(full_path, exist_ok=True)
-                self.packed.append(Pack(name_dir=name_point, high=high_point, receiver_name=receiver_name))
+                self.packed.append(Pack(name_full=name_point, high=high_point, receiver_name=receiver_name))
                 if self.packed[-1].name not in dict_count.keys():
                     dict_count[self.packed[-1].name] = 0
                 dict_count[self.packed[-1].name] += 1
@@ -248,6 +271,8 @@ class TelegramConnect:
                         await asyncio.sleep(0.5)
         for name, count in dict_count.items():
             print(Fore.YELLOW + f"{name}: {count}" + Style.RESET_ALL)
+
+
 
         
         
@@ -280,12 +305,12 @@ class AutoXML:
                 name_file = file_names[0]
                 size_file = str(round(os.path.getsize(f"{dir_path}\\{file_names[0]}.jps") / 1024 / 1024, 1)).replace(",", ".")
                 for pck in self.tg.packed:
-                    if pck.name_dir == dir_:
+                    if pck.name_full == dir_:
                         pck.size_file = size_file
                         pck.name_file = name_file
                         is_ = True
                 if not is_:
-                    self.tg.packed.append(Pack(name_dir=dir_, name_file=name_file, size_file=size_file, high=None))
+                    self.tg.packed.append(Pack(name_full=dir_, name_file=name_file, size_file=size_file, high=None))
 
 
 
@@ -319,7 +344,7 @@ class AutoXML:
         ws.delete_rows(idx=5)
         ws.merge_cells(f"B{number_of_end_string-1}:I{number_of_end_string-1}")
         ws.row_dimensions[5].height = 15
-        sorted_list_info = sorted(list_info, key=lambda x: x.name_dir)
+        sorted_list_info = sorted(list_info, key=lambda x: x.name_full)
         for i, info in enumerate(sorted_list_info):
             self.full_copy_paste_string(ws, 4, 4+i, 10)
             self.fill_string(ws, 4+i, info)
@@ -329,7 +354,7 @@ class AutoXML:
 
     def fill_string(self, ws, number_string, string):
         ws[f'A{number_string}'] = string.name
-        ws[f'B{number_string}'] = string.name_dir
+        ws[f'B{number_string}'] = string.name_full
         ws[f'H{number_string}'] = string.name_file
         ws[f'G{number_string}'] = string.high
         ws[f'I{number_string}'] = string.size_file
@@ -396,15 +421,15 @@ def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
         #list_info = [.name_dir=ГТСП-2, .receiver_name=12]
         base_files = {file_name: files for file_name, files in count_of_type_jps_files.items() if len(files) == 1}
         for info in list_info:
-            if info.name_dir in folder_bases and info.receiver_name is not None:
+            if info.name_full in folder_bases and info.receiver_name is not None:
                 base_file_name = info.receiver_name
                 if base_file_name in base_files.keys():
                     base_file = base_files[base_file_name][0]
                 else:
                     raise ValueError(f"Указаный {base_file_name} not in {base_files.keys()}")
-                print(f"Найдена база {info.name_dir} = {base_file}")
-                os.rename(f"{path_to_files}\\{base_file}", f"{path_to_folders}\\{info.name_dir}\\{base_file}")
-                folder_bases.remove(info.name_dir)
+                print(f"Найдена база {info.name_full} = {base_file}")
+                os.rename(f"{path_to_files}\\{base_file}", f"{path_to_folders}\\{info.name_full}\\{base_file}")
+                folder_bases.remove(info.name_full)
                 base_files.pop(base_file_name)
                 count_of_type_jps_files.pop(base_file_name)
                 
@@ -453,11 +478,11 @@ def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
         print(Fore.RED + "Не хватило папок для распределения!!!" + Style.RESET_ALL)
         raise ValueError
     for pack_info in list_info[::-1]:
-        if pack_info.name_dir in empty_folder:
+        if pack_info.name_full in empty_folder:
             if len(queue_files):
                 file = queue_files.pop(0)
-                print(Fore.GREEN + f"{file}  =  {pack_info.name_dir}" + Style.RESET_ALL)
-                os.rename(f"{path_to_files}\\{file}", f"{path_to_folders}\\{pack_info.name_dir}\\{file}")
+                print(Fore.GREEN + f"{file}  =  {pack_info.name_full}" + Style.RESET_ALL)
+                os.rename(f"{path_to_files}\\{file}", f"{path_to_folders}\\{pack_info.name_full}\\{file}")
 
 
 if __name__ == "__main__":
