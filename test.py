@@ -382,7 +382,6 @@ class AutoXML:
             self.create_XML(list_packed_for_flight, path_for_flight, f"{self.storage.data['date']}_ТСП_под_полёты")
             os.remove(f"{path_for_flight}\\{self.storage.data['name']}.xlsx")
         for n in os.listdir(self.storage.data['path']):
-            print(n)
             if os.path.isdir(f'{self.storage.data['path']}\\{n}') and "ТСП" in n and "ГТСП" not in n and "ТСП-ОП" not in n:
                 shutil.rmtree(f'{self.storage.data['path']}\\{n}')
 
@@ -445,7 +444,6 @@ def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
     queue_files = [info.receiver_name for info in list_info if info.name != "ГТСП"][::-1]
     jps_files_name_iter = cycle(count_of_type_jps_files.keys())
 
-    print(count_of_type_jps_files)
     if len(count_of_type_jps_files.keys()) == 2 and None in queue_files:
         type_ = input(
             f"Какой тип двойной сортировки выберите первый файл (1 вариант: {next(jps_files_name_iter)}, 2 вариант: {next(jps_files_name_iter)}): ")
@@ -471,9 +469,10 @@ def folder_distribution_of_files(path_to_files, path_to_folders, list_info):
             if not len(count_of_type_jps_files.keys()):
                 print(Fore.RED + "Не хватило файлов для полного распределения!!!" + Style.RESET_ALL)
                 raise ValueError
-                queue_files = queue_files[:i]
-                break
+
         queue_files[i] = count_of_type_jps_files[value].pop(0)
+        if not len(count_of_type_jps_files[value]):
+            count_of_type_jps_files.pop(value)
     if len(count_of_type_jps_files.keys()):
         print(Fore.RED + "Не хватило папок для распределения!!!" + Style.RESET_ALL)
         raise ValueError
