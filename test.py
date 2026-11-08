@@ -34,7 +34,7 @@ class Pack:
 
 class SafetyStorage:
     def __init__(self):
-        self.name_session = "session1"
+        self.name_session = ("session1")
 
         if not os.path.exists('log.enc'):
             print("Файла log.bin нет, создаем...")
@@ -83,6 +83,24 @@ class SafetyStorage:
         self.question_change_data()
         self.save_data()
 
+    def ask_date(self):
+        today = date.today().strftime("%Y-%m-%d")
+        user_date = self.not_any_way_answer(f"Дата ({today}): ", today)
+        if user_date.isdigit():
+            user_date = today[:-2] + user_date
+        elif re.search(r'^\d{1,2}-\d{1,2}$', user_date):
+            user_date = today[:-5] + user_date
+        return str(datetime.strptime(user_date, "%Y-%m-%d").date())
+
+    def ask_path(self):
+        path = None
+        if self.data["path"] is not None:
+            path = re.sub(r"\d{4}([_-]\d{2}){2}", self.data['date'], self.data['path'])
+
+        user_path = self.not_any_way_answer(f"Путь до директории({path}): ", path)
+        if user_path is not None and not re.search(r"\\", user_path):
+            return "\\".join(self.data["path"].split("\\")[:-1]) + f"\\{user_path}"
+        return user_path
 
     def save_data(self):
         data = json.dumps(self.data, ensure_ascii=False, indent=4)
@@ -143,18 +161,14 @@ class SafetyStorage:
                                 self.data["receiver_names"][int(num_)] = name_
                         elif a:
                             self.data["receiver_names"][num] = a
-        today = date.today().strftime("%Y-%m-%d")
-        self.data['date'] = self.not_any_way_answer(f"Дата ({today}): ", today)
+        self.data['date'] = self.ask_date()
+
+        name = None
         if self.data["name"] is not None:
             name = re.sub(r"\d{4}([_-]\d{2}){2}", self.data['date'], self.data['name'])
-        else:
-            name = None
-        if self.data["path"] is not None:
-            path = re.sub(r"\d{4}([_-]\d{2}){2}", self.data['date'], self.data['path'])
-        else:
-            path = None
+
         self.data['name'] = self.not_any_way_answer(f"Имя файла xml({name}): ", name)
-        self.data['path'] = self.not_any_way_answer(f"Путь до директории({path}): ", path)
+        self.data['path'] = self.ask_path()
         
     def encrypt_session_file(self):
         with open(f'{self.name_session}.enc', 'wb') as enc_file, open(f"{self.name_session}.session", 'rb') as session_file:
